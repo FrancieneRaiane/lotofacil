@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Lotofácil - Resultados Personalizados</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+      background-color: #f0f0f0;
+    }
+
+    h2, h3 {
+      color: #800080;
+      text-align: center;
+    }
+
+    .card, #maisFrequentes, #sorteioAleatorio, #dezenasAusentes {
+      background-color: #fefefe;
+      padding: 1rem;
+      border-radius: 10px;
+      max-width: 1200px;
+      margin: 2rem auto;
+      text-align: center;
+    }
+
+    #resultados {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 1rem;
+      margin-top: 2rem;
+      justify-content: center;
+      overflow-x: auto;
+    }
+
+    .concurso {
+      background-color: #ffffff;
+      border-top: 5px solid #e01313;
+      padding: 1rem;
+      border-radius: 10px;
+      width: 250px;
+      flex-shrink: 0;
+    }
+
+    .dezenas {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 5px;
+      margin-top: 0.5rem;
+    }
+
+    .dezena, .frequente-item, .sorteado-item, .ausente-item {
+      display: inline-block;
+      margin: 0.3rem;
+      background-color: #c70c0c71;
+      color: #fff;
+      padding: 5px;
+      border-radius: 5px;
+      font-weight: bold;
+      text-align: center;
+      width: 40px;
+    }
+
+    .frequente-item { background-color: #8e44ad; }
+    .sorteado-item { background-color: #16a085; }
+    .ausente-item { background-color: #34495e; }
+
+    .controle {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    input[type="number"], input[type="text"], select {
+      padding: 5px;
+      font-size: 1rem;
+      margin: 0.5rem;
+    }
+
+    button {
+      padding: 6px 12px;
+      font-size: 1rem;
+      border: none;
+      background-color: #800080;
+      color: #fff;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #5e005e;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="controle">
+    <label for="modo">Modo de busca:</label>
+    <select id="modo" onchange="atualizarCampos()">
+      <option value="ultimos">Últimos Concursos</option>
+      <option value="manuais">Informar Números dos Concursos</option>
+    </select>
+
+    <div id="campoQtd">
+      <label for="quantidade">Quantidade (1 a 10):</label>
+      <input type="number" id="quantidade" min="1" max="10" value="5" />
+    </div>
+
+    <div id="campoManuais" class="hidden">
+      <label for="concursos">Concursos (separados por vírgula):</label>
+      <input type="text" id="concursos" placeholder="Ex: 3400,3200,3222" />
+    </div>
+
+    <button onclick="carregarResultados()">Buscar</button>
+  </div>
+
+  <div class="card">
+    <h2>Lotofácil - Resultados</h2>
+    <div id="resultados"></div>
+  </div>
+
+  <div id="maisFrequentes">
+    <h3>Dezenas que Mais se Repetem</h3>
+    <div class="frequencia-info" id="infoRepetidas"></div>
+    <div class="dezenas" id="frequentes"></div>
+  </div>
+
+  <div id="sorteioAleatorio">
+    <h3>15 Dezenas (Aleatórias) Entre as Mais Repetidas</h3>
+    <div class="dezenas" id="sorteadas"></div>
+  </div>
+
+  <div id="dezenasAusentes">
+    <h3>Dezenas que Não Apareceram</h3>
+    <div class="dezenas" id="ausentes"></div>
+  </div>
+
+  <script>
+    function atualizarCampos() {
+      const modo = document.getElementById('modo').value;
+      document.getElementById('campoQtd').classList.toggle('hidden', modo !== 'ultimos');
+      document.getElementById('campoManuais').classList.toggle('hidden', modo !== 'manuais');
+    }
+
+    async function carregarResultados() {
+      const modo = document.getElementById('modo').value;
+      const container = document.getElementById('resultados');
+      container.innerHTML = '';
+      const contagem = {};
+
+      let concursos = [];
+
+      if (modo === 'ultimos') {
+        const quantidade = parseInt(document.getElementById('quantidade').value);
+        if (isNaN(quantidade) || quantidade < 1 || quantidade > 10) {
+          alert('Informe uma quantidade válida de concursos (1 a 10)');
+          return;
+        }
+        const response = await fetch('https://loteriascaixa-api.herokuapp.com/api/lotofacil?l=10');
+        const resultados = await response.json();
+        concursos = resultados.slice(0, quantidade);
+      } else {
+        const texto = document.getElementById('concursos').value;
+        if (!texto.trim()) {
+          alert('Informe ao menos um número de concurso');
+          return;
+        }
+
+        const numeros = texto.split(',').map(c => parseInt(c.trim())).filter(c => !isNaN(c));
+        if (numeros.length === 0) {
+          alert('Números de concurso inválidos');
+          return;
+        }
+
+        const promises = numeros.map(async (numero) => {
+          const res = await fetch(`https://loteriascaixa-api.herokuapp.com/api/lotofacil/${numero}`);
+          return await res.json();
+        });
+
+        concursos = await Promise.all(promises);
+      }
+
+      // Exibição dos concursos
+      concursos.forEach(resultado => {
+        const div = document.createElement('div');
+        div.className = 'concurso';
+
+        const titulo = document.createElement('p');
+        titulo.innerHTML = `<strong>Concurso:</strong> ${resultado.concurso} <br><strong>Data:</strong> ${new Date(resultado.data).toLocaleDateString('pt-BR')}`;
+        div.appendChild(titulo);
+
+        const dezenasContainer = document.createElement('div');
+        dezenasContainer.className = 'dezenas';
+
+        resultado.dezenas.forEach(dezena => {
+          const span = document.createElement('span');
+          span.className = 'dezena';
+          span.textContent = dezena;
+          dezenasContainer.appendChild(span);
+
+          contagem[dezena] = (contagem[dezena] || 0) + 1;
+        });
+
+        div.appendChild(dezenasContainer);
+        container.appendChild(div);
+      });
+
+      // Mais frequentes
+      const maisFrequentes = Object.entries(contagem)
+        .filter(([, freq]) => freq > 1)
+        .sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
+
+      const containerFrequentes = document.getElementById('frequentes');
+      containerFrequentes.innerHTML = '';
+      const infoRepetidas = document.getElementById('infoRepetidas');
+
+      if (maisFrequentes.length > 0) {
+        infoRepetidas.textContent = `Total de números repetidos: ${maisFrequentes.length}`;
+        maisFrequentes.forEach(([dezena, freq]) => {
+          const span = document.createElement('div');
+          span.className = 'frequente-item';
+          span.textContent = `${dezena} (${freq}x)`;
+          containerFrequentes.appendChild(span);
+        });
+      } else {
+        infoRepetidas.textContent = `Nenhuma dezena se repetiu.`;
+      }
+
+      // Sorteio aleatório
+      const containerSorteadas = document.getElementById('sorteadas');
+      containerSorteadas.innerHTML = '';
+
+      if (maisFrequentes.length >= 15) {
+        const dezenasApenas = maisFrequentes.map(([dezena]) => dezena);
+        const embaralhadas = dezenasApenas.sort(() => Math.random() - 0.5).slice(0, 15);
+        embaralhadas.sort((a, b) => parseInt(a) - parseInt(b));
+
+        embaralhadas.forEach(dezena => {
+          const span = document.createElement('div');
+          span.className = 'sorteado-item';
+          span.textContent = dezena;
+          containerSorteadas.appendChild(span);
+        });
+      } else {
+        containerSorteadas.innerHTML = '<p>Menos de 15 dezenas se repetiram. Não é possível sortear.</p>';
+      }
+
+      // Dezenas ausentes
+      const dezenasPresentes = Object.keys(contagem).map(Number);
+      const todasAsDezenas = Array.from({ length: 25 }, (_, i) => i + 1);
+      const ausentes = todasAsDezenas.filter(num => !dezenasPresentes.includes(num));
+
+      const containerAusentes = document.getElementById('ausentes');
+      containerAusentes.innerHTML = '';
+
+      if (ausentes.length > 0) {
+        ausentes.forEach(num => {
+          const span = document.createElement('div');
+          span.className = 'ausente-item';
+          span.textContent = num.toString().padStart(2, '0');
+          containerAusentes.appendChild(span);
+        });
+      } else {
+        containerAusentes.innerHTML = '<p>Todas as dezenas apareceram.</p>';
+      }
+    }
+
+    carregarResultados();
+  </script>
+</body>
+</html>
